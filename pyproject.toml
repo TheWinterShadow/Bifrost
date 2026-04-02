@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bifrost"
+version = "0.1.0"
+description = "Apple HomeKit bridge for Govee and Google Nest devices via HAP-python"
+requires-python = ">=3.11"
+dependencies = [
+    "HAP-python[QRCode]>=4.9",
+]
+
+[project.scripts]
+bifrost = "bifrost.bridge:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bifrost"]
+
+# ---------------------------------------------------------------------------
+# Environments
+# ---------------------------------------------------------------------------
+
+[tool.hatch.envs.default]
+dependencies = [
+    "ruff",
+    "pytest",
+    "pytest-asyncio",
+]
+
+[tool.hatch.envs.default.scripts]
+lint   = ["ruff check bifrost tests", "ruff format --check bifrost tests"]
+fmt    = "ruff format bifrost tests"
+test   = "pytest tests"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+# Docker environment — wraps docker CLI; no extra Python deps needed.
+[tool.hatch.envs.docker]
+
+[tool.hatch.envs.docker.scripts]
+build = "docker build -t bifrost:latest ."
+run   = "docker run --rm -p 51826:51826/tcp -p 51826:51826/udp -v bifrost-state:/data -e GOVEE_API_KEY={args} --name bifrost bifrost:latest"
+push  = "docker tag bifrost:latest {args} && docker push {args}"
