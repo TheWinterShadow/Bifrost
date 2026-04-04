@@ -68,6 +68,21 @@ class TestParseCapabilities:
         _, brightness = _parse_capabilities([])
         assert brightness == 100
 
+    def test_normalises_254_scale_max_to_100(self):
+        caps = [{"instance": "brightness", "state": {"value": 254}}]
+        _, brightness = _parse_capabilities(caps)
+        assert brightness == 100
+
+    def test_normalises_254_scale_half_to_50(self):
+        caps = [{"instance": "brightness", "state": {"value": 127}}]
+        _, brightness = _parse_capabilities(caps)
+        assert brightness == 50
+
+    def test_does_not_normalise_values_within_0_to_100(self):
+        caps = [{"instance": "brightness", "state": {"value": 75}}]
+        _, brightness = _parse_capabilities(caps)
+        assert brightness == 75
+
     def test_ignores_unrelated_capabilities(self):
         caps = [
             {"instance": "powerSwitch", "state": {"value": 1}},

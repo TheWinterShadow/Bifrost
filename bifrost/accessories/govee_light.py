@@ -71,9 +71,16 @@ class GoveeLight(Light):
 
 
 def _parse_capabilities(capabilities: list[dict[str, Any]]) -> tuple[bool, int]:
-    """Extract (on, brightness) from a Govee capabilities list."""
+    """Extract (on, brightness) from a Govee capabilities list.
+
+    Some Govee devices report brightness on a 0-254 scale instead of 0-100.
+    Values above 100 are normalised to the 0-100 range HomeKit requires.
+    """
     caps = {c["instance"]: c["state"]["value"] for c in capabilities}
-    return bool(caps.get("powerSwitch", 0)), int(caps.get("brightness", 100))
+    on = bool(caps.get("powerSwitch", 0))
+    raw_brightness = int(caps.get("brightness", 100))
+    brightness = round(raw_brightness / 254 * 100) if raw_brightness > 100 else raw_brightness
+    return on, brightness
 
 
 def discover_lights(client: GoveeClient, driver: AccessoryDriver) -> list[GoveeLight]:
