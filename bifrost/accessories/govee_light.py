@@ -23,12 +23,12 @@ class GoveeLight(Light):
 
     def _set_on(self, value: bool) -> None:
         if value:
-            self._client.turn_on_device(self._sku, self._device_id)
+            self.driver.add_job(self._client.turn_on_device, self._sku, self._device_id)
         else:
-            self._client.turn_off_device(self._sku, self._device_id)
+            self.driver.add_job(self._client.turn_off_device, self._sku, self._device_id)
 
     def _set_brightness(self, value: int) -> None:
-        self._client.set_device_brightness(self._sku, self._device_id, value)
+        self.driver.add_job(self._client.set_device_brightness, self._sku, self._device_id, value)
 
     # ── device → HomeKit ─────────────────────────────────────────────────────
 
@@ -39,7 +39,10 @@ class GoveeLight(Light):
         self.char_brightness.set_value(brightness)
 
     async def _fetch_state(self) -> tuple[bool, int]:
-        response = self._client.get_device_state(self._sku, self._device_id)
+        loop = self.driver.loop
+        response = await loop.run_in_executor(
+            None, self._client.get_device_state, self._sku, self._device_id
+        )
         return _parse_capabilities(response["payload"]["capabilities"])
 
 
