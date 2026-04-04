@@ -1,5 +1,6 @@
 """Govee light accessory."""
 
+import asyncio
 import logging
 import random
 from typing import Any
@@ -10,6 +11,8 @@ from bifrost.accessories.light import Light
 from bifrost.utils.govee import GoveeClient
 
 logger = logging.getLogger(__name__)
+
+POLL_INTERVAL = 30
 
 
 class GoveeLight(Light):
@@ -22,7 +25,7 @@ class GoveeLight(Light):
         self._client = client
         self._sku = sku
         self._device_id = device_id
-        # Stagger polls so all 15 lights don't hit the API at the same time
+        # Stagger polls so all lights don't hit the Govee API simultaneously
         self._poll_offset = random.uniform(0, 25)
         logger.info("Registered light: %s (sku=%s device=%s)", name, sku, device_id)
 
@@ -30,7 +33,6 @@ class GoveeLight(Light):
 
     def _set_on(self, value: bool) -> None:
         logger.info("%s: setting on=%s", self.display_name, value)
-        # Optimistically update so HomeKit doesn't show stale state
         self.char_on.set_value(value)
         if value:
             self.driver.add_job(self._client.turn_on_device, self._sku, self._device_id)
@@ -44,22 +46,20 @@ class GoveeLight(Light):
 
     # ── device → HomeKit ─────────────────────────────────────────────────────
 
-    @Light.run_at_interval(30)
     async def run(self) -> None:
-        # Honour the stagger offset on the very first poll
-        if self._poll_offset > 0:
-            import asyncio
-
-            await asyncio.sleep(self._poll_offset)
-            self._poll_offset = 0
-
-        try:
-            on, brightness = await self._fetch_state()
-            logger.debug("%s: polled state on=%s brightness=%s", self.display_name, on, brightness)
-            self.char_on.set_value(on)
-            self.char_brightness.set_value(brightness)
-        except Exception:
-            logger.exception("%s: failed to fetch state", self.display_name)
+        """Fetch state immediately, then poll every POLL_INTERVAL seconds."""
+        await asyncio.sleep(self._poll_offset)
+        while True:
+            try:
+                on, brightness = await self._fetch_state()
+                logger.info(
+                    "%s: polled state on=%s brightness=%s", self.display_name, on, brightness
+                )
+                self.char_on.set_value(on)
+                self.char_brightness.set_value(brightness)
+            except Exception:
+                logger.exception("%s: failed to fetch state", self.display_name)
+            await asyncio.sleep(POLL_INTERVAL)
 
     async def _fetch_state(self) -> tuple[bool, int]:
         loop = self.driver.loop

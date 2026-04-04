@@ -23,21 +23,36 @@ def build_bridge(driver: AccessoryDriver) -> Bridge:
     """Construct the bridge and attach all accessories."""
     bridge = Bridge(driver, BRIDGE_NAME)
 
-    govee = GoveeClient(os.environ["GOVEE_API_KEY"])
-    for light in discover_lights(govee, driver):
+    api_key = os.environ.get("GOVEE_API_KEY")
+    if not api_key:
+        logger.error("GOVEE_API_KEY is not set — no lights will be loaded")
+        return bridge
+
+    govee = GoveeClient(api_key)
+    lights = discover_lights(govee, driver)
+    for light in lights:
         bridge.add_accessory(light)
+    logger.info("Bridge ready with %d accessory(s)", len(lights))
 
     return bridge
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO)
-
-    driver = AccessoryDriver(
-        port=51826,
-        persist_file=PERSIST_FILE,
-        address=os.environ.get("BIFROST_ADDRESS") or None,
+    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, log_level, logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+
+    address = os.environ.get("BIFROST_ADDRESS") or None
+    logger.info(
+        "Starting Bifrost — address=%s port=51826 state=%s log_level=%s",
+        address or "auto",
+        PERSIST_FILE,
+        log_level,
+    )
+
+    driver = AccessoryDriver(port=51826, persist_file=PERSIST_FILE, address=address)
     driver.add_accessory(build_bridge(driver))
 
     signal.signal(signal.SIGTERM, driver.signal_handler)
