@@ -33,7 +33,11 @@ def build_bridge(driver: AccessoryDriver) -> Bridge:
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
 
-    driver = AccessoryDriver(port=51826, persist_file=PERSIST_FILE)
+    driver = AccessoryDriver(
+        port=51826,
+        persist_file=PERSIST_FILE,
+        address=os.environ.get("BIFROST_ADDRESS") or None,
+    )
     driver.add_accessory(build_bridge(driver))
 
     signal.signal(signal.SIGTERM, driver.signal_handler)
