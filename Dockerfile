@@ -16,10 +16,10 @@ RUN hatch build -t wheel
 # ── Stage 2: runtime image ────────────────────────────────────────────────────
 FROM python:3.12-slim
 
-# HAP-python needs avahi/mDNS on Linux for service discovery.
-# Installing avahi-daemon covers both the daemon and the dbus dependency.
+# avahi-utils provides avahi-browse for mDNS; the daemon itself runs on the
+# host when using network_mode: host (Raspberry Pi / Linux).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends avahi-daemon dbus \
+    && apt-get install -y --no-install-recommends avahi-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -37,5 +37,4 @@ ENV GOVEE_API_KEY=""
 EXPOSE 51826/tcp
 EXPOSE 51826/udp
 
-# avahi needs dbus at runtime
-CMD ["sh", "-c", "mkdir -p /var/run/dbus && dbus-daemon --system --fork && avahi-daemon --daemonize --no-chroot && bifrost"]
+CMD ["bifrost"]
