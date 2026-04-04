@@ -18,7 +18,7 @@ Apple HomeKit bridge for Govee and Google Nest devices, built on [HAP-python](ht
 ### 1. Pull the image
 
 ```bash
-docker pull thewintersshadow/bifrost:latest
+docker pull thewintershadow/bifrost:latest
 ```
 
 ### 2. Run the container
@@ -30,7 +30,7 @@ docker run --rm \
   -v bifrost-state:/data \
   -e GOVEE_API_KEY=your-api-key \
   --name bifrost \
-  thewintersshadow/bifrost:latest
+  thewintershadow/bifrost:latest
 ```
 
 Or with Hatch (local build):
