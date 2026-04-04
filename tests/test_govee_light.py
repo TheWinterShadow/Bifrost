@@ -1,6 +1,6 @@
 """Tests for GoveeLight accessory and capability parsing."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -23,12 +23,20 @@ def mock_client():
 
 
 @pytest.fixture
-def light(mock_client):
+def mock_driver():
+    driver = MagicMock()
+    driver.loop.run_in_executor = AsyncMock(return_value=SAMPLE_STATE_RESPONSE)
+    return driver
+
+
+@pytest.fixture
+def light(mock_client, mock_driver):
     """GoveeLight with HAP initialisation bypassed."""
     with patch("bifrost.accessories.light.Light.__init__", return_value=None):
         instance = GoveeLight(
-            MagicMock(), "Test Light", client=mock_client, sku="H6076", device_id="AA:BB:CC"
+            mock_driver, "Test Light", client=mock_client, sku="H6076", device_id="AA:BB:CC"
         )
+    instance.driver = mock_driver
     return instance
 
 
@@ -72,32 +80,32 @@ class TestParseCapabilities:
 
 
 class TestGoveeLightControl:
-    def test_set_on_calls_turn_on(self, light, mock_client):
+    def test_set_on_calls_turn_on(self, light, mock_client, mock_driver):
         light._set_on(True)
-        mock_client.turn_on_device.assert_called_once_with("H6076", "AA:BB:CC")
-        mock_client.turn_off_device.assert_not_called()
+        mock_driver.add_job.assert_called_once_with(mock_client.turn_on_device, "H6076", "AA:BB:CC")
 
-    def test_set_on_calls_turn_off(self, light, mock_client):
+    def test_set_on_calls_turn_off(self, light, mock_client, mock_driver):
         light._set_on(False)
-        mock_client.turn_off_device.assert_called_once_with("H6076", "AA:BB:CC")
-        mock_client.turn_on_device.assert_not_called()
+        mock_driver.add_job.assert_called_once_with(
+            mock_client.turn_off_device, "H6076", "AA:BB:CC"
+        )
 
-    def test_set_brightness(self, light, mock_client):
+    def test_set_brightness(self, light, mock_client, mock_driver):
         light._set_brightness(60)
-        mock_client.set_device_brightness.assert_called_once_with("H6076", "AA:BB:CC", 60)
+        mock_driver.add_job.assert_called_once_with(
+            mock_client.set_device_brightness, "H6076", "AA:BB:CC", 60
+        )
 
 
 class TestGoveeLightFetchState:
-    async def test_returns_parsed_state(self, light, mock_client):
-        mock_client.get_device_state.return_value = SAMPLE_STATE_RESPONSE
+    async def test_returns_parsed_state(self, light, mock_driver):
         on, brightness = await light._fetch_state()
         assert on is True
         assert brightness == 75
 
-    async def test_calls_api_with_correct_ids(self, light, mock_client):
-        mock_client.get_device_state.return_value = SAMPLE_STATE_RESPONSE
+    async def test_calls_api_with_correct_ids(self, light, mock_driver):
         await light._fetch_state()
-        mock_client.get_device_state.assert_called_once_with("H6076", "AA:BB:CC")
+        mock_driver.loop.run_in_executor.assert_called_once()
 
 
 # ── discover_lights ───────────────────────────────────────────────────────────
