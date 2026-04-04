@@ -37,6 +37,9 @@ def light(mock_client, mock_driver):
             mock_driver, "Test Light", client=mock_client, sku="H6076", device_id="AA:BB:CC"
         )
     instance.driver = mock_driver
+    instance.display_name = "Test Light"
+    instance.char_on = MagicMock()
+    instance.char_brightness = MagicMock()
     return instance
 
 
