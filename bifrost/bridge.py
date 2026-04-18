@@ -1,6 +1,5 @@
 """HAP bridge setup and entry point."""
 
-import asyncio
 import logging
 import os
 import signal
@@ -37,12 +36,13 @@ def build_bridge(driver: AccessoryDriver) -> Bridge:
     else:
         logger.warning("GOVEE_API_KEY is not set — skipping Govee devices")
 
-    # SmartRent devices (async API)
+    # SmartRent devices (async API — run on the driver's loop so the
+    # aiohttp session stays bound to the loop that will be running)
     sr_email = os.environ.get("SMARTRENT_EMAIL")
     sr_password = os.environ.get("SMARTRENT_PASSWORD")
     if sr_email and sr_password:
         sr_client = SmartRentClient(sr_email, sr_password)
-        inventory = asyncio.run(sr_client.connect())
+        inventory = driver.loop.run_until_complete(sr_client.connect())
         accessories.extend(discover_thermostats(inventory.thermostats, driver))
     else:
         logger.warning("SMARTRENT_EMAIL/SMARTRENT_PASSWORD not set — skipping SmartRent devices")
