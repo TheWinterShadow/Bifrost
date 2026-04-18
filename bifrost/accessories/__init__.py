@@ -1,1 +1,1 @@
-"""Accessory implementations for Govee and Google Nest devices."""
+"""Accessory base classes and implementations for HomeKit devices."""

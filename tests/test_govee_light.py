@@ -32,7 +32,7 @@ def mock_driver():
 @pytest.fixture
 def light(mock_client, mock_driver):
     """GoveeLight with HAP initialisation bypassed."""
-    with patch("bifrost.accessories.light.Light.__init__", return_value=None):
+    with patch("bifrost.accessories.base.light.Light.__init__", return_value=None):
         instance = GoveeLight(
             mock_driver, "Test Light", client=mock_client, sku="H6076", device_id="AA:BB:CC"
         )
@@ -135,7 +135,7 @@ class TestDiscoverLights:
             {"deviceName": "Bedroom", "sku": "H6076", "device": "AA:BB"},
             {"deviceName": "Kitchen", "sku": "H605C", "device": "CC:DD"},
         ]
-        with patch("bifrost.accessories.light.Light.__init__", return_value=None):
+        with patch("bifrost.accessories.base.light.Light.__init__", return_value=None):
             lights = discover_lights(mock_client, MagicMock())
         assert len(lights) == 2
 
@@ -143,13 +143,13 @@ class TestDiscoverLights:
         mock_client.get_lights.return_value = [
             {"deviceName": "Bedroom", "sku": "H6076", "device": "AA:BB"},
         ]
-        with patch("bifrost.accessories.light.Light.__init__", return_value=None):
+        with patch("bifrost.accessories.base.light.Light.__init__", return_value=None):
             lights = discover_lights(mock_client, MagicMock())
         assert lights[0]._sku == "H6076"
         assert lights[0]._device_id == "AA:BB"
 
     def test_empty_account_returns_empty_list(self, mock_client):
         mock_client.get_lights.return_value = []
-        with patch("bifrost.accessories.light.Light.__init__", return_value=None):
+        with patch("bifrost.accessories.base.light.Light.__init__", return_value=None):
             lights = discover_lights(mock_client, MagicMock())
         assert lights == []

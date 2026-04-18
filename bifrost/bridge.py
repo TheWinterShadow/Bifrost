@@ -8,6 +8,7 @@ import dotenv
 from pyhap.accessory import Bridge
 from pyhap.accessory_driver import AccessoryDriver
 
+from bifrost.accessories.govee_air_purifier import discover_air_purifiers
 from bifrost.accessories.govee_light import discover_lights
 from bifrost.utils.govee import GoveeClient
 
@@ -25,14 +26,18 @@ def build_bridge(driver: AccessoryDriver) -> Bridge:
 
     api_key = os.environ.get("GOVEE_API_KEY")
     if not api_key:
-        logger.error("GOVEE_API_KEY is not set — no lights will be loaded")
+        logger.error("GOVEE_API_KEY is not set — no accessories will be loaded")
         return bridge
 
     govee = GoveeClient(api_key)
-    lights = discover_lights(govee, driver)
-    for light in lights:
-        bridge.add_accessory(light)
-    logger.info("Bridge ready with %d accessory(s)", len(lights))
+
+    accessories = [
+        *discover_lights(govee, driver),
+        *discover_air_purifiers(govee, driver),
+    ]
+    for accessory in accessories:
+        bridge.add_accessory(accessory)
+    logger.info("Bridge ready with %d accessory(s)", len(accessories))
 
     return bridge
 

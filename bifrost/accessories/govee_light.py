@@ -7,7 +7,7 @@ from typing import Any
 
 from pyhap.accessory_driver import AccessoryDriver
 
-from bifrost.accessories.light import Light
+from bifrost.accessories.base.light import Light
 from bifrost.utils.govee import GoveeClient
 
 logger = logging.getLogger(__name__)

@@ -139,3 +139,48 @@ class GoveeClient:
         )
         logger.debug("Set brightness %s / %s result: %s", device_sku, device_id, result.get("msg"))
         return result
+
+    # ── Air purifier helpers ─────────────────────────────────────────────────
+
+    def get_air_purifiers(self) -> list[dict[str, Any]]:
+        """Return all air purifier devices from the Govee account."""
+        logger.debug("Fetching device list for air purifiers")
+        devices = self._call_api("/user/devices")["data"]
+        purifiers = [
+            d
+            for d in devices
+            if d["sku"] != "BaseGroup" and d["type"] == "devices.types.air_purifier"
+        ]
+        logger.debug("Found %d air purifier(s) out of %d device(s)", len(purifiers), len(devices))
+        return purifiers
+
+    def set_device_mode(
+        self, device_sku: str, device_id: str, mode: int, value: int = 0
+    ) -> dict[str, Any]:
+        """Set the operating mode on a device.
+
+        Args:
+            device_sku: The device SKU.
+            device_id: The device ID.
+            mode: Mode identifier from the device's capability descriptor.
+            value: Mode-specific value (e.g. gear/speed level within the mode).
+        """
+        logger.debug("Setting mode %d (value=%d) on %s / %s", mode, value, device_sku, device_id)
+        result = self._call_api(
+            "/device/control",
+            method="POST",
+            data={
+                "requestId": "uuid",
+                "payload": {
+                    "sku": device_sku,
+                    "device": device_id,
+                    "capability": {
+                        "type": "devices.capabilities.work_mode",
+                        "instance": "workMode",
+                        "value": {"workMode": mode, "modeValue": value},
+                    },
+                },
+            },
+        )
+        logger.debug("Set mode %s / %s result: %s", device_sku, device_id, result.get("msg"))
+        return result
