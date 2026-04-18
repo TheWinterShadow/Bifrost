@@ -12,6 +12,7 @@ from bifrost.accessories.base.air_purifier import (
     AirPurifierCurrentState,
     AirPurifierState,
     AirPurifierTargetState,
+    AirQuality,
 )
 from bifrost.utils.govee import GoveeClient
 
@@ -19,11 +20,10 @@ logger = logging.getLogger(__name__)
 
 POLL_INTERVAL = 30
 
-# Govee work modes for air purifiers (from device capability descriptors).
-# Exact values vary by SKU, but these are the common ones across H713x series.
+# Govee work modes for air purifiers (from actual device state logs).
 GOVEE_MODE_MANUAL = 1
-GOVEE_MODE_AUTO = 2
-GOVEE_MODE_SLEEP = 3
+GOVEE_MODE_SLEEP = 2
+GOVEE_MODE_AUTO = 3
 
 # Maximum fan gear value reported by most Govee air purifiers.
 GOVEE_MAX_GEAR = 4
@@ -40,8 +40,19 @@ class GoveeAirPurifier(AirPurifier):
         client: GoveeClient,
         sku: str,
         device_id: str,
+        has_air_quality_sensor: bool = False,
+        has_humidity_sensor: bool = False,
+        has_temperature_sensor: bool = False,
+        has_filter_maintenance: bool = False,
     ) -> None:
-        super().__init__(driver, name)
+        super().__init__(
+            driver,
+            name,
+            has_air_quality_sensor=has_air_quality_sensor,
+            has_humidity_sensor=has_humidity_sensor,
+            has_temperature_sensor=has_temperature_sensor,
+            has_filter_maintenance=has_filter_maintenance,
+        )
         self._client = client
         self._sku = sku
         self._device_id = device_id
@@ -99,6 +110,19 @@ class GoveeAirPurifier(AirPurifier):
                 self.char_current_state.set_value(state.current_state)
                 self.char_target_state.set_value(state.target_state)
                 self.char_rotation_speed.set_value(state.rotation_speed)
+
+                if self.char_air_quality is not None and state.air_quality is not None:
+                    self.char_air_quality.set_value(state.air_quality)
+                if self.char_pm25 is not None and state.pm25_density is not None:
+                    self.char_pm25.set_value(state.pm25_density)
+                if self.char_humidity is not None and state.humidity is not None:
+                    self.char_humidity.set_value(state.humidity)
+                if self.char_temperature is not None and state.temperature is not None:
+                    self.char_temperature.set_value(state.temperature)
+                if self.char_filter_life is not None and state.filter_life is not None:
+                    self.char_filter_life.set_value(state.filter_life)
+                if self.char_filter_change is not None and state.filter_change is not None:
+                    self.char_filter_change.set_value(state.filter_change)
             except Exception:
                 logger.exception("%s: failed to fetch state", self.display_name)
             await asyncio.sleep(POLL_INTERVAL)
@@ -118,6 +142,9 @@ def _parse_capabilities(capabilities: list[dict[str, Any]]) -> AirPurifierState:
     Govee air purifiers expose:
     - ``powerSwitch`` (0/1)
     - ``workMode`` with ``workMode`` and ``modeValue`` sub-fields
+    - ``airQuality`` (integer, lower is better — mapped to HAP AirQuality enum)
+    - ``humidity`` (relative humidity percentage)
+    - ``temperature`` (temperature in Celsius)
     """
     caps = {c["instance"]: c["state"]["value"] for c in capabilities}
 
@@ -144,12 +171,62 @@ def _parse_capabilities(capabilities: list[dict[str, Any]]) -> AirPurifierState:
         target_state = AirPurifierTargetState.MANUAL
         rotation_speed = _gear_to_percent(mode_value)
 
+    # -- Optional sensor data --
+    air_quality: int | None = None
+    pm25_density: float | None = None
+    if "airQuality" in caps:
+        raw_aq = int(caps["airQuality"])
+        air_quality = _govee_aq_to_hap(raw_aq)
+        pm25_density = float(raw_aq)
+
+    humidity: float | None = None
+    if "humidity" in caps:
+        humidity = float(caps["humidity"])
+
+    temperature: float | None = None
+    if "temperature" in caps:
+        temperature = float(caps["temperature"])
+
+    # -- Filter data --
+    filter_life: float | None = None
+    filter_change: int | None = None
+    if "filterLifeLevel" in caps:
+        filter_life = float(caps["filterLifeLevel"])
+        filter_change = 1 if filter_life <= 5 else 0
+
     return AirPurifierState(
         active=int(on),
         current_state=current_state,
         target_state=target_state,
         rotation_speed=rotation_speed,
+        air_quality=air_quality,
+        pm25_density=pm25_density,
+        humidity=humidity,
+        temperature=temperature,
+        filter_life=filter_life,
+        filter_change=filter_change,
     )
+
+
+def _govee_aq_to_hap(raw_value: int) -> int:
+    """Map a Govee air quality value to the HAP AirQuality enum.
+
+    Govee reports raw PM2.5 in µg/m³. Standard breakpoints (US AQI):
+    - 0-12: Excellent
+    - 13-35: Good
+    - 36-55: Fair
+    - 56-150: Inferior
+    - 151+: Poor
+    """
+    if raw_value <= 12:
+        return AirQuality.EXCELLENT
+    if raw_value <= 35:
+        return AirQuality.GOOD
+    if raw_value <= 55:
+        return AirQuality.FAIR
+    if raw_value <= 150:
+        return AirQuality.INFERIOR
+    return AirQuality.POOR
 
 
 def _gear_to_percent(gear: int, max_gear: int = GOVEE_MAX_GEAR) -> float:
@@ -167,16 +244,26 @@ def _percent_to_gear(percent: float, max_gear: int = GOVEE_MAX_GEAR) -> int:
 
 
 def discover_air_purifiers(client: GoveeClient, driver: AccessoryDriver) -> list[GoveeAirPurifier]:
-    """Return a GoveeAirPurifier for every air purifier in the Govee account."""
+    """Return a GoveeAirPurifier for every air purifier in the Govee account.
+
+    Inspects each device's capability list to determine which linked
+    services (air quality sensor, humidity, temperature, filter) should
+    be enabled.
+    """
     logger.info("Discovering Govee air purifiers...")
     purifiers: list[GoveeAirPurifier] = []
     for device in client.get_air_purifiers():
+        cap_instances = {c.get("instance", "") for c in device.get("capabilities", [])}
         purifier = GoveeAirPurifier(
             driver,
             device["deviceName"],
             client=client,
             sku=device["sku"],
             device_id=device["device"],
+            has_air_quality_sensor="airQuality" in cap_instances,
+            has_humidity_sensor="humidity" in cap_instances,
+            has_temperature_sensor="temperature" in cap_instances,
+            has_filter_maintenance="filterLifeLevel" in cap_instances,
         )
         purifiers.append(purifier)
     logger.info("Discovered %d air purifier(s)", len(purifiers))

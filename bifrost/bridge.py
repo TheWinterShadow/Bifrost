@@ -1,5 +1,6 @@
 """HAP bridge setup and entry point."""
 
+import asyncio
 import logging
 import os
 import signal
@@ -10,7 +11,9 @@ from pyhap.accessory_driver import AccessoryDriver
 
 from bifrost.accessories.govee_air_purifier import discover_air_purifiers
 from bifrost.accessories.govee_light import discover_lights
+from bifrost.accessories.smartrent_thermostat import discover_thermostats
 from bifrost.utils.govee import GoveeClient
+from bifrost.utils.smartrent import SmartRentClient
 
 dotenv.load_dotenv(".envrc")
 
@@ -23,18 +26,27 @@ PERSIST_FILE = os.environ.get("BIFROST_STATE_FILE", "bifrost.state")
 def build_bridge(driver: AccessoryDriver) -> Bridge:
     """Construct the bridge and attach all accessories."""
     bridge = Bridge(driver, BRIDGE_NAME)
+    accessories = []
 
+    # Govee devices (sync API)
     api_key = os.environ.get("GOVEE_API_KEY")
-    if not api_key:
-        logger.error("GOVEE_API_KEY is not set — no accessories will be loaded")
-        return bridge
+    if api_key:
+        govee = GoveeClient(api_key)
+        accessories.extend(discover_lights(govee, driver))
+        accessories.extend(discover_air_purifiers(govee, driver))
+    else:
+        logger.warning("GOVEE_API_KEY is not set — skipping Govee devices")
 
-    govee = GoveeClient(api_key)
+    # SmartRent devices (async API)
+    sr_email = os.environ.get("SMARTRENT_EMAIL")
+    sr_password = os.environ.get("SMARTRENT_PASSWORD")
+    if sr_email and sr_password:
+        sr_client = SmartRentClient(sr_email, sr_password)
+        inventory = asyncio.run(sr_client.connect())
+        accessories.extend(discover_thermostats(inventory.thermostats, driver))
+    else:
+        logger.warning("SMARTRENT_EMAIL/SMARTRENT_PASSWORD not set — skipping SmartRent devices")
 
-    accessories = [
-        *discover_lights(govee, driver),
-        *discover_air_purifiers(govee, driver),
-    ]
     for accessory in accessories:
         bridge.add_accessory(accessory)
     logger.info("Bridge ready with %d accessory(s)", len(accessories))

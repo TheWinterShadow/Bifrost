@@ -11,6 +11,7 @@ dependencies = [
     "HAP-python[QRCode]>=4.9",
     "requests",
     "python-dotenv",
+    "smartrent-py",
 ]
 
 [project.scripts]

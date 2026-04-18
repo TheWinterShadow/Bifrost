@@ -184,3 +184,61 @@ class GoveeClient:
         )
         logger.debug("Set mode %s / %s result: %s", device_sku, device_id, result.get("msg"))
         return result
+
+    def set_device_color(
+        self, device_sku: str, device_id: str, r: int, g: int, b: int
+    ) -> dict[str, Any]:
+        """Set the RGB color on a device.
+
+        Args:
+            r: Red value (0-255).
+            g: Green value (0-255).
+            b: Blue value (0-255).
+        """
+        logger.debug("Setting color (%d,%d,%d) on %s / %s", r, g, b, device_sku, device_id)
+        result = self._call_api(
+            "/device/control",
+            method="POST",
+            data={
+                "requestId": "uuid",
+                "payload": {
+                    "sku": device_sku,
+                    "device": device_id,
+                    "capability": {
+                        "type": "devices.capabilities.color_setting",
+                        "instance": "colorRgb",
+                        "value": (r << 16) | (g << 8) | b,
+                    },
+                },
+            },
+        )
+        logger.debug("Set color %s / %s result: %s", device_sku, device_id, result.get("msg"))
+        return result
+
+    def set_device_color_temperature(
+        self, device_sku: str, device_id: str, kelvin: int
+    ) -> dict[str, Any]:
+        """Set the color temperature on a device.
+
+        Args:
+            kelvin: Color temperature in Kelvin.
+        """
+        logger.debug("Setting color temp %dK on %s / %s", kelvin, device_sku, device_id)
+        result = self._call_api(
+            "/device/control",
+            method="POST",
+            data={
+                "requestId": "uuid",
+                "payload": {
+                    "sku": device_sku,
+                    "device": device_id,
+                    "capability": {
+                        "type": "devices.capabilities.color_setting",
+                        "instance": "colorTemInKelvin",
+                        "value": kelvin,
+                    },
+                },
+            },
+        )
+        logger.debug("Set color temp %s / %s result: %s", device_sku, device_id, result.get("msg"))
+        return result
